@@ -21,11 +21,15 @@ public class StarterPlugin extends BasePlugin {
 
     @Override
     public void start() {
-        System.out.println("插件启动成功！");
+        System.out.println("插件启动成功！hhh111");
     }
 
     @Override
     public void stop() {
-        System.out.println("插件停止！");
+        System.out.println("插件停止！hhh111");
+    }
+    @Override
+    public void delete(){
+        System.out.printf("插件删除！hhh111");
     }
 }

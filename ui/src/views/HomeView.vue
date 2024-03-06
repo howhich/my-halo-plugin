@@ -1,169 +1,216 @@
 <script setup lang="ts">
-import confetti from "canvas-confetti";
-import { onMounted } from "vue";
-import RiShareCircleLine from "~icons/ri/share-circle-line";
-import RiCodeBoxLine from "~icons/ri/code-box-line";
-import RiBookReadLine from "~icons/ri/book-read-line";
-import RiComputerLine from "~icons/ri/computer-line";
-import RiArrowRightSLine from "~icons/ri/arrow-right-s-line";
+import axios from "axios";
+import type { Todo, TodoList } from "../types";
+import { computed, onMounted, ref } from "vue";
+import Logo from "../assets/logo.svg";
 
-onMounted(() => {
-  confetti({
-    particleCount: 100,
-    spread: 70,
-    origin: { y: 0.6, x: 0.58 },
-  });
+const http = axios.create({
+  baseURL: "/",
+  timeout: 1000,
 });
+
+interface Tab {
+  label: string;
+}
+
+const todos = ref<TodoList>({
+  page: 1,
+  size: 20,
+  total: 0,
+  items: [],
+  first: true,
+  last: false,
+  hasNext: false,
+  hasPrevious: false,
+  totalPages: 0,
+});
+
+const tabs = [
+  {
+    label: "All",
+  },
+  {
+    label: "Active",
+  },
+  {
+    label: "Completed",
+  },
+];
+
+const activeTab = ref("All");
+
+/**
+ * 列表展示的数据
+ */
+const todoList = computed(() => {
+  if (activeTab.value === "All") {
+    return todos.value.items;
+  }
+  if (activeTab.value === "Active") {
+    return filterByDone(false);
+  }
+  if (activeTab.value === "Completed") {
+    return filterByDone(true);
+  }
+  return [];
+});
+
+const filterByDone = (done: boolean) => {
+  return todos.value.items.filter((todo) => todo.spec.done === done);
+};
+
+// 查看 http://localhost:8090/swagger-ui.html
+function handleFetchTodos() {
+  http
+    .get<TodoList>("/apis/todo.plugin.halo.run/v1alpha1/todos")
+    .then((response) => {
+      todos.value = response.data;
+    });
+}
+
+onMounted(handleFetchTodos);
+
+// 创建的逻辑
+
+const title = ref("");
+
+function handleCreate(e: Event) {
+  http
+    .post<Todo>("/apis/todo.plugin.halo.run/v1alpha1/todos", {
+      metadata: {
+        // 根据 'todo-' 前缀自动生成 todo 的名称作为唯一标识，可以理解为数据库自动生成主键 id
+        generateName: "todo-",
+      },
+      spec: {
+        title: title.value,
+        done: false,
+      },
+      kind: "Todo",
+      apiVersion: "todo.plugin.halo.run/v1alpha1",
+    })
+    .then((response) => {
+      title.value = "";
+      handleFetchTodos();
+    });
+}
+
+// 更新的逻辑
+const selectedTodo = ref<Todo | undefined>();
+const handleUpdate = () => {
+  http
+    .put<Todo>(
+      `/apis/todo.plugin.halo.run/v1alpha1/todos/${selectedTodo.value?.metadata.name}`,
+      selectedTodo.value
+    )
+    .then((response) => {
+      handleFetchTodos();
+    });
+};
+
+function handleDoneChange(todo: Todo) {
+  todo.spec.done = !todo.spec.done;
+  http
+    .put<Todo>(
+      `/apis/todo.plugin.halo.run/v1alpha1/todos/${todo.metadata.name}`,
+      todo
+    )
+    .then((response) => {
+      handleFetchTodos();
+    });
+}
+
+// 删除
+const handleDelete = (todo: Todo) => {
+  http
+    .delete(`/apis/todo.plugin.halo.run/v1alpha1/todos/${todo.metadata.name}`)
+    .then((response) => {
+      handleFetchTodos();
+    });
+};
 </script>
 
 <template>
-  <section id="plugin-starter">
-    <div class="wrapper">
-      <span class="title"> 你已经成功运行起了插件！ </span>
-      <span class="message">你可以点击下方文档继续下一步</span>
-      <div class="docs">
-        <a
-          href="https://docs.halo.run/developer-guide/plugin/publish"
-          class="docs__box"
-          target="_blank"
+  <section class="todoapp">
+    <header class="header">
+      <h1>
+        <img :src="Logo" alt="logo" style="display: inline; width: 64px" />
+        todos
+      </h1>
+      <input
+        class="new-todo"
+        autofocus
+        v-model="title"
+        placeholder="What needs to be done?"
+        @keyup.enter="handleCreate"
+      />
+    </header>
+    <section class="main" v-show="todos.items.length">
+      <input
+        id="toggle-all"
+        class="toggle-all"
+        type="checkbox"
+        :checked="filterByDone(false).length > 0"
+      />
+      <label for="toggle-all">Mark all as complete</label>
+      <ul class="todo-list">
+        <li
+          v-for="(todo, index) in todoList"
+          class="todo"
+          :key="index"
+          :class="{ completed: todo.spec.done, editing: todo === selectedTodo }"
         >
-          <h2 class="docs__box-title"><RiShareCircleLine />发布一个插件</h2>
-          <span class="docs__box-message">
-            了解如何与我们的社区分享您的扩展。
-          </span>
-          <span class="docs__box-arrow">
-            <RiArrowRightSLine />
-          </span>
-        </a>
-        <a
-          href="https://docs.halo.run/developer-guide/plugin/structure"
-          class="docs__box"
-          target="_blank"
+          <div class="view">
+            <input
+              class="toggle"
+              type="checkbox"
+              :checked="todo.spec.done"
+              @click="handleDoneChange(todo)"
+            />
+            <label @dblclick="selectedTodo = todo">{{ todo.spec.title }}</label>
+            <button class="destroy" @click="handleDelete(todo)"></button>
+          </div>
+          <input
+            v-if="selectedTodo"
+            class="edit"
+            type="text"
+            v-model="selectedTodo.spec.title"
+            @vnode-mounted="({ el }) => el.focus()"
+            @blur="handleUpdate()"
+            @keyup.enter="handleUpdate()"
+            @keyup.escape="selectedTodo = undefined"
+          />
+        </li>
+      </ul>
+    </section>
+    <footer class="footer" v-show="todos.total">
+      <span class="todo-count">
+        <strong>{{ filterByDone(false).length }}</strong>
+        <span>
+          {{ filterByDone(false).length === 1 ? " item" : " items" }} left</span
         >
-          <h2 class="docs__box-title"><RiComputerLine />基础概览</h2>
-          <span class="docs__box-message">
-            了解插件的项目结构、生命周期、资源配置等。
-          </span>
-          <span class="docs__box-arrow">
-            <RiArrowRightSLine />
-          </span>
-        </a>
-        <a
-          href="https://docs.halo.run/developer-guide/plugin/examples/todolist"
-          class="docs__box group"
-          target="_blank"
-        >
-          <h2 class="docs__box-title"><RiBookReadLine />示例插件</h2>
-          <span class="docs__box-message">帮助你从 0 到 1 完成一个插件。</span>
-          <span class="docs__box-arrow">
-            <RiArrowRightSLine />
-          </span>
-        </a>
-        <a
-          href="https://docs.halo.run/developer-guide/plugin/api-reference/extension"
-          class="docs__box"
-          target="_blank"
-        >
-          <h2 class="docs__box-title"><RiCodeBoxLine />API 参考</h2>
-          <span class="docs__box-message">插件中的 API 列表。</span>
-          <span class="docs__box-arrow">
-            <RiArrowRightSLine />
-          </span>
-        </a>
-      </div>
-    </div>
+      </span>
+      <ul class="filters">
+        <li v-for="(tab, index) in tabs" :key="index">
+          <a
+            href="javascript:void(0);"
+            @click="activeTab = tab.label"
+            :class="{ selected: activeTab === tab.label }"
+          >
+            {{ tab.label }}
+          </a>
+        </li>
+      </ul>
+      <button
+        class="clear-completed"
+        @click="() => filterByDone(true).map((todo) => handleDelete(todo))"
+        v-show="todos.items.length > filterByDone(false).length"
+      >
+        Clear completed
+      </button>
+    </footer>
   </section>
 </template>
 
-<style lang="scss" scoped>
-#plugin-starter {
-  height: 100vh;
-  background-color: #f8fafc;
-}
-
-.wrapper {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-  gap: 1.5rem;
-
-  .title {
-    font-weight: 700;
-    font-size: 1.25rem;
-    line-height: 1.75rem;
-  }
-
-  .message {
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-    color: #4b5563;
-  }
-
-  .docs {
-    display: grid;
-    grid-template-columns: repeat(1, minmax(0, 1fr));
-    gap: 1rem;
-    max-width: 48rem;
-
-    .docs__box {
-      background-color: #fff;
-      border-radius: 0.375rem;
-      padding: 0.75rem;
-      transition-property: all;
-      transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-      transition-duration: 300ms;
-      cursor: pointer;
-      filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.1))
-        drop-shadow(0 1px 1px rgb(0 0 0 / 0.06));
-
-      &:hover {
-        box-shadow: 0 0 0 0px #fff, 0 0 0 1px rgb(59 130 246 / 0.5), 0 0 #0000;
-      }
-
-      .docs__box-title {
-        display: flex;
-        flex-direction: row;
-        font-size: 1.125rem;
-        line-height: 1.75rem;
-        font-weight: 700;
-        margin-bottom: 2rem;
-        gap: 0.5rem;
-        align-items: center;
-      }
-
-      .docs__box-message {
-        font-size: 0.875rem;
-        line-height: 1.25rem;
-        color: #4b5563;
-      }
-
-      .docs__box-arrow {
-        pointer-events: none;
-        position: absolute;
-        top: 1rem;
-        right: 1rem;
-        transition-property: all;
-        transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-        transition-duration: 150ms;
-        color: #d1d5db;
-      }
-
-      &:hover {
-        .docs__box-arrow {
-          color: #9ca3af;
-          transform: translate(00.375rem, 0) rotate(0) skewX(0) skewY(0)
-            scaleX(1) scaleY(1);
-        }
-      }
-    }
-  }
-
-  @media (min-width: 640px) {
-    .docs {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-}
+<style scoped>
+@import "todomvc-app-css/index.css";
 </style>

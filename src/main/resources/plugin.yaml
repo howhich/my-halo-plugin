@@ -2,19 +2,19 @@ apiVersion: plugin.halo.run/v1alpha1
 kind: Plugin
 metadata:
   # The name defines how the plugin is invoked,A unique name
-  name: starter
+  name: starter-todolist
 spec:
   enabled: true
   requires: ">=2.11.0"
   author:
-    name: Halo
+    name: Howhich
     website: https://github.com/halo-dev
   logo: logo.png
   # 'homepage' usually links to the GitHub repository of the plugin
   homepage: https://github.com/halo-dev/plugin-starter
   # 'displayName' explains what the plugin does in only a few words
-  displayName: "插件快速开始模板"
-  description: "这是一个插件快速开始模板"
+  displayName: "todolist插件快速开始模板ByHowhich"
+  description: "todolist这是一个插件快速开始模板ByHowhich"
   license:
     - name: "GPL-3.0"
       url: "https://github.com/halo-dev/plugin-starter/blob/main/LICENSE"
